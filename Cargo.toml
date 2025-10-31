@@ -1,0 +1,13 @@
+[package]
+name = "chess"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bevy = { version = "0.17.0" }
+#bevy_dylib = "0.17.2"
+bevy_modern_pixel_camera = "0.4.0"
+
+[features]
+default = ["dynamic_linking"]
+dynamic_linking = ["bevy/dynamic_linking"]

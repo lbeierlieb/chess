@@ -26,7 +26,7 @@ fn main() {
             )
                 .chain(),
         )
-        .add_systems(Update, (move_light))
+        .add_systems(Update, (move_light, move_pieces))
         .add_observer(new_selection_handler)
         .add_observer(try_move_handler)
         .add_observer(check_winner)
@@ -144,6 +144,27 @@ fn move_light(mut query: Query<&mut Transform, With<PointLight>>, time: Res<Time
     let pos = center + rot.mul_vec3(Vec3::new(0., 0., distance));
     for mut transform in &mut query {
         transform.translation = pos;
+    }
+}
+
+fn move_pieces(mut pieces: Query<(&mut Transform, &PieceMarker)>, time: Res<Time>) {
+    for (mut transform, marker) in pieces.iter_mut() {
+        // filter out thrown pieces, which are hidden under the map
+        // TODO remove when we despawn thrown pieces
+        if transform.translation.y != 0. {
+            continue;
+        }
+        let marker_in_world = Vec3::new(
+            marker.pos.x as f32 * 2. + 1.,
+            0.,
+            -(marker.pos.y as f32 * 2. + 1.),
+        );
+        let diff = marker_in_world - transform.translation;
+        let distance = diff.length();
+        let step_distance = (15. * time.delta_secs()).clamp(0., distance);
+        if let Some(step) = diff.try_normalize().map(|v| v * step_distance) {
+            transform.translation += step;
+        }
     }
 }
 
@@ -331,8 +352,6 @@ fn successful_move_handler(
         for &(origin, destination) in moves.iter() {
             if marker.pos == origin {
                 marker.pos = destination;
-                transform.translation.x = destination.x as f32 * 2. + 1.;
-                transform.translation.z = -(destination.y as f32 * 2. + 1.);
             }
         }
     }

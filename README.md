@@ -6,6 +6,20 @@ Try for yourself in the browser: https://lbeierlieb.github.io/chess/
 
 ![](cover.png)
 
+# Features and Limitations
+
+Existing functionality:
+- Interacting with the chess board with mouse clicks
+- Display of possible moves
+- En Passant and Castling
+- Winner detection
+
+Current limiations:
+- Winner is only printed in log
+- No detection of draw
+- Castling possible in cases where it shouldn't
+- Always showing perspective of player White
+
 # Run locally
 
 You can run the native build by executing:

@@ -14,7 +14,7 @@ Existing functionality:
 - En Passant and Castling
 - Winner detection
 
-Current limiations:
+Current limitations:
 - Winner is only printed in log
 - No detection of draw
 - Castling possible in cases where it shouldn't

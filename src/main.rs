@@ -1,4 +1,4 @@
-use bevy::{prelude::*, sprite::Anchor};
+use bevy::prelude::*;
 use bevy_modern_pixel_camera::prelude::*;
 use gamelogic::{
     coordinates::Position,
@@ -181,7 +181,7 @@ fn animate_possible_moves(
     mut query: Query<(&mut Transform, &mut PossibleMoveHighlight)>,
     time: Res<Time>,
 ) {
-    for (mut transform, mut highlight) in &mut query {
+    for (mut transform, highlight) in &mut query {
         let individual_offset = 1.0 * (transform.translation.x - transform.translation.z) / 30.;
         transform.rotation = Quat::from_axis_angle(
             Vec3::Y,
@@ -233,7 +233,7 @@ fn update_mouse_board_position(
 struct SelectionChangedEvent {}
 
 fn new_selection_handler(
-    event: On<SelectionChangedEvent>,
+    _: On<SelectionChangedEvent>,
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     selected_marker: Query<Entity, With<SelectedMarker>>,
@@ -341,14 +341,14 @@ fn successful_move_handler(
     };
 
     if let Some(throw_pos) = thrown {
-        for (mut transform, mut marker) in pieces.iter_mut() {
+        for (mut transform, marker) in pieces.iter_mut() {
             if marker.pos == throw_pos {
                 // TODO despawn instead
                 transform.translation.y = -5.;
             }
         }
     }
-    for (mut transform, mut marker) in pieces.iter_mut() {
+    for (_, mut marker) in pieces.iter_mut() {
         for &(origin, destination) in moves.iter() {
             if marker.pos == origin {
                 marker.pos = destination;
@@ -360,10 +360,8 @@ fn successful_move_handler(
 fn mouse_click_handler(
     mouse_button_input_reader: Res<ButtonInput<MouseButton>>,
     mouse_board_position: Res<MouseBoardPosition>,
-    asset_server: Res<AssetServer>,
     mut game: ResMut<ChessGame>,
     mut commands: Commands,
-    mut pieces: Query<&mut Transform, With<PieceMarker>>,
 ) {
     if !mouse_button_input_reader.just_pressed(MouseButton::Left) {
         return;
@@ -388,7 +386,7 @@ fn mouse_click_handler(
         return;
     }
 
-    if let Some(pos_moveable) = selected_movable {
+    if selected_movable.is_some() {
         // clicked on friendly field, showing possible moves
         game.selected_tile = selected_movable;
         commands.trigger(SelectionChangedEvent {});

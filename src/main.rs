@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use bevy::{input::touch::TouchPhase, prelude::*};
 use bevy_modern_pixel_camera::prelude::*;
 use gamelogic::{
     coordinates::Position,
@@ -21,6 +21,7 @@ fn main() {
             ((rotate_selected_marker, animate_possible_moves),).chain(),
         )
         .add_systems(Update, (move_light, move_pieces))
+        .add_systems(Update, (mouse_input_listener, touch_input_listener))
         .add_systems(Update, mouse_input_listener)
         .add_observer(raw_click_handler)
         .add_observer(board_click_handler)
@@ -209,6 +210,16 @@ fn mouse_input_listener(
     let window = window.single().unwrap();
     if let Some(pos) = window.cursor_position() {
         commands.trigger(RawClickEvent { pos });
+    }
+}
+
+fn touch_input_listener(mut touches: MessageReader<TouchInput>, mut commands: Commands) {
+    for touch in touches.read() {
+        if touch.phase == TouchPhase::Started {
+            commands.trigger(RawClickEvent {
+                pos: touch.position,
+            });
+        }
     }
 }
 

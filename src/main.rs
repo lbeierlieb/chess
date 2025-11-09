@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use bevy::{input::touch::TouchPhase, prelude::*};
 use bevy_modern_pixel_camera::prelude::*;
 use gamelogic::{
     coordinates::Position,
@@ -16,17 +16,15 @@ fn main() {
         .add_plugins(PixelCameraPlugin)
         .insert_resource(ChessGame::default())
         .add_systems(Startup, initialize_rendering)
-        .insert_resource(MouseBoardPosition::default())
         .add_systems(
             Update,
-            (
-                update_mouse_board_position,
-                mouse_click_handler,
-                (rotate_selected_marker, animate_possible_moves),
-            )
-                .chain(),
+            ((rotate_selected_marker, animate_possible_moves),).chain(),
         )
         .add_systems(Update, (move_light, move_pieces))
+        .add_systems(Update, (mouse_input_listener, touch_input_listener))
+        .add_systems(Update, mouse_input_listener)
+        .add_observer(raw_click_handler)
+        .add_observer(board_click_handler)
         .add_observer(new_selection_handler)
         .add_observer(try_move_handler)
         .add_observer(check_winner)
@@ -192,40 +190,76 @@ fn animate_possible_moves(
             + 0.1 * ((time.elapsed_secs() + individual_offset) * PI * 1.5).sin();
     }
 }
-#[derive(Resource, Default)]
-struct MouseBoardPosition {
-    field: Option<(u8, u8)>,
+
+/// Event indicating that the mouse was clicked or the touch pad touched.
+#[derive(Debug, Event)]
+struct RawClickEvent {
+    /// Window coords where the click/touch happened
+    pos: Vec2,
 }
 
-fn update_mouse_board_position(
+fn mouse_input_listener(
+    mouse_button_input_reader: Res<ButtonInput<MouseButton>>,
     window: Query<&Window>,
-    camera: Query<(&Camera, &GlobalTransform)>,
-    mut mouse_board_position: ResMut<MouseBoardPosition>,
+    mut commands: Commands,
 ) {
+    if !mouse_button_input_reader.just_pressed(MouseButton::Left) {
+        return;
+    }
+
     let window = window.single().unwrap();
+    if let Some(pos) = window.cursor_position() {
+        commands.trigger(RawClickEvent { pos });
+    }
+}
+
+fn touch_input_listener(mut touches: MessageReader<TouchInput>, mut commands: Commands) {
+    for touch in touches.read() {
+        if touch.phase == TouchPhase::Started {
+            commands.trigger(RawClickEvent {
+                pos: touch.position,
+            });
+        }
+    }
+}
+
+/// Event indicating a click or a touch, in chess board coordinates.
+#[derive(Debug, Event)]
+struct BoardClickEvent {
+    /// The click position in board coord. If None, the click was outside the chessboard.
+    board_pos: Option<Position>,
+}
+
+/// Takes raw input (mouse clicks, touch) and converts to chessboard coordinates.
+fn raw_click_handler(
+    event: On<RawClickEvent>,
+    mut commands: Commands,
+    camera: Query<(&Camera, &GlobalTransform)>,
+) {
     let (camera, camera_transform) = camera.single().unwrap();
 
-    if let Some(ray) = window
-        .cursor_position()
-        .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor).ok())
-    {
+    if let Ok(ray) = camera.viewport_to_world(camera_transform, event.pos) {
         if ray.direction.y > -0.0001 {
-            mouse_board_position.field = None;
+            // we are not looking down
+            // cannot happen with fixed camera
+            commands.trigger(BoardClickEvent { board_pos: None });
             return;
         }
         let t = -ray.origin.y / ray.direction.y;
         let intersect = ray.origin + ray.direction * t;
         if intersect.x < 0. || intersect.z > 0. {
-            mouse_board_position.field = None;
+            commands.trigger(BoardClickEvent { board_pos: None });
             return;
         }
         let x = intersect.x as u64 / 2;
         let y = (-intersect.z) as u64 / 2;
-        mouse_board_position.field = if x <= 7 && y <= 7 {
-            Some((x as u8, y as u8))
+        let board_pos = if x <= 7 && y <= 7 {
+            Some(Position::new(x as u8, y as u8))
         } else {
             None
         };
+        commands.trigger(BoardClickEvent { board_pos });
+        return;
     }
 }
 
@@ -357,18 +391,12 @@ fn successful_move_handler(
     }
 }
 
-fn mouse_click_handler(
-    mouse_button_input_reader: Res<ButtonInput<MouseButton>>,
-    mouse_board_position: Res<MouseBoardPosition>,
+fn board_click_handler(
+    event: On<BoardClickEvent>,
     mut game: ResMut<ChessGame>,
     mut commands: Commands,
 ) {
-    if !mouse_button_input_reader.just_pressed(MouseButton::Left) {
-        return;
-    }
-
-    let selected_movable = mouse_board_position.field.and_then(|(x, y)| {
-        let pos = Position::new(x, y);
+    let selected_movable = event.board_pos.and_then(|pos| {
         game.game
             .piece_at(pos)
             .and_then(|piece| {
@@ -390,13 +418,11 @@ fn mouse_click_handler(
         // clicked on friendly field, showing possible moves
         game.selected_tile = selected_movable;
         commands.trigger(SelectionChangedEvent {});
-    } else if let (Some(origin), Some((dest_x, dest_y))) =
-        (game.selected_tile, mouse_board_position.field)
-    {
+    } else if let (Some(origin), Some(destination)) = (game.selected_tile, event.board_pos) {
         // previously selected a tile, now clicked on another field. Try to do the move.
         commands.trigger(TryMoveEvent {
             origin,
-            destination: Position::new(dest_x, dest_y),
+            destination,
         });
         // either the move succeeds and the board changes or the user clicked on a tile that is
         // unreachable for the selected piece. In both cases, we deselect the current tile.
